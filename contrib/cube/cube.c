@@ -98,7 +98,7 @@ NDBOX	   *cube_union_v0(NDBOX *a, NDBOX *b);
 void		rt_cube_size(NDBOX *a, double *sz);
 NDBOX	   *g_cube_binary_union(NDBOX *r1, NDBOX *r2, int *sizep);
 bool		g_cube_leaf_consistent(NDBOX *key, NDBOX *query, StrategyNumber strategy);
-bool		g_cube_internal_consistent(NDBOX *key, NDBOX *query, StrategyNumber strategy);
+int		g_cube_internal_consistent(NDBOX *key, NDBOX *query, StrategyNumber strategy);
 
 /*
 ** Auxiliary funxtions
@@ -670,7 +670,7 @@ g_cube_internal_consistent(NDBOX *key,
 						   StrategyNumber strategy)
 {
 	bool		retval;
-	bool		contained;
+	bool		contained = false;
 
 	/*
 	 * fprintf(stderr, "internal_consistent, %d\n", strategy);

@@ -336,7 +336,8 @@ g_cube_consistent(PG_FUNCTION_ARGS)
 
 	/* Oid		subtype = PG_GETARG_OID(3); */
 	bool	   *recheck = (bool *) PG_GETARG_POINTER(4);
-	bool		res;
+	//bool		res;
+	int			res_multi_state;
 
 	/* All cases served by this function are exact */
 	*recheck = false;
@@ -345,15 +346,19 @@ g_cube_consistent(PG_FUNCTION_ARGS)
 	 * if entry is not leaf, use g_cube_internal_consistent, else use
 	 * g_cube_leaf_consistent
 	 */
-	if (GIST_LEAF(entry))
-		res = g_cube_leaf_consistent(DatumGetNDBOX(entry->key),
-									 query, strategy);
+	if (GIST_LEAF(entry)) {
+		if(g_cube_leaf_consistent(DatumGetNDBOX(entry->key),
+												 query, strategy))
+			res_multi_state = 1;
+		else res_multi_state = 0;
+	}
 	else
-		res = g_cube_internal_consistent(DatumGetNDBOX(entry->key),
-										 query, strategy);
+		res_multi_state = g_cube_internal_consistent(DatumGetNDBOX(entry->key),
+													 query, strategy);
 
 	PG_FREE_IF_COPY(query, 1);
-	PG_RETURN_BOOL(res);
+	//PG_RETURN_BOOL(res);
+	PG_RETURN_CHAR(res_multi_state);
 }
 
 
@@ -658,12 +663,14 @@ g_cube_leaf_consistent(NDBOX *key,
 	return (retval);
 }
 
-bool
+//bool
+int
 g_cube_internal_consistent(NDBOX *key,
 						   NDBOX *query,
 						   StrategyNumber strategy)
 {
 	bool		retval;
+	bool		contained;
 
 	/*
 	 * fprintf(stderr, "internal_consistent, %d\n", strategy);
@@ -677,6 +684,7 @@ g_cube_internal_consistent(NDBOX *key,
 		case RTContainsStrategyNumber:
 		case RTOldContainsStrategyNumber:
 			retval = (bool) cube_contains_v0(key, query);
+			contained = retval;
 			break;
 		case RTContainedByStrategyNumber:
 		case RTOldContainedByStrategyNumber:
@@ -685,7 +693,7 @@ g_cube_internal_consistent(NDBOX *key,
 		default:
 			retval = FALSE;
 	}
-	return (retval);
+	return (retval ? 1 : 0) + (contained ? 2 : 0) ;
 }
 
 NDBOX *

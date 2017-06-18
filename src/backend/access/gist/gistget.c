@@ -120,7 +120,14 @@ gistkillitems(IndexScanDesc scan)
  * so we don't need to worry about cleaning up allocated memory, either here
  * or in the implementation of any Consistent or Distance methods.
  */
-static bool
+
+#define NONE			0
+#define MAYBE			1
+#define ALL_GOOD			2
+
+
+//static bool
+static int
 gistindex_keytest(IndexScanDesc scan,
 				  IndexTuple tuple,
 				  Page page,
@@ -135,6 +142,7 @@ gistindex_keytest(IndexScanDesc scan,
 	double	   *distance_p;
 	Relation	r = scan->indexRelation;
 
+	bool		allGood = false;
 	*recheck_p = false;
 	*recheck_distances_p = false;
 
@@ -151,7 +159,7 @@ gistindex_keytest(IndexScanDesc scan,
 			elog(ERROR, "invalid GiST tuple found on leaf page");
 		for (i = 0; i < scan->numberOfOrderBys; i++)
 			so->distances[i] = -get_float8_infinity();
-		return true;
+		return MAYBE;
 	}
 
 	/* Check whether it matches according to the Consistent functions */
@@ -176,18 +184,18 @@ gistindex_keytest(IndexScanDesc scan,
 			if (key->sk_flags & SK_SEARCHNULL)
 			{
 				if (GistPageIsLeaf(page) && !isNull)
-					return false;
+					return NONE;
 			}
 			else
 			{
 				Assert(key->sk_flags & SK_SEARCHNOTNULL);
 				if (isNull)
-					return false;
+					return NONE;
 			}
 		}
 		else if (isNull)
 		{
-			return false;
+			return NONE;
 		}
 		else
 		{
@@ -223,7 +231,9 @@ gistindex_keytest(IndexScanDesc scan,
 									 PointerGetDatum(&recheck));
 
 			if (!DatumGetBool(test))
-				return false;
+				return NONE;
+			if (DatumGetChar(test) & 2)
+				allGood = true;
 			*recheck_p |= recheck;
 		}
 
@@ -293,7 +303,7 @@ gistindex_keytest(IndexScanDesc scan,
 		keySize--;
 	}
 
-	return true;
+	return allGood ? ALL_GOOD : MAYBE;
 }
 
 /*
@@ -393,7 +403,7 @@ gistScanPage(IndexScanDesc scan, GISTSearchItem *pageItem, double *myDistances,
 	{
 		ItemId		iid = PageGetItemId(page, i);
 		IndexTuple	it;
-		bool		match;
+		int			match;
 		bool		recheck;
 		bool		recheck_distances;
 
@@ -412,8 +422,13 @@ gistScanPage(IndexScanDesc scan, GISTSearchItem *pageItem, double *myDistances,
 		 */
 		oldcxt = MemoryContextSwitchTo(so->giststate->tempCxt);
 
-		match = gistindex_keytest(scan, it, page, i,
-								  &recheck, &recheck_distances);
+		if (pageItem->allGood)
+		{
+			match = ALL_GOOD;
+		}
+		else
+			match = gistindex_keytest(scan, it, page, i,
+									  &recheck, &recheck_distances);
 
 		MemoryContextSwitchTo(oldcxt);
 		MemoryContextReset(so->giststate->tempCxt);
@@ -484,6 +499,7 @@ gistScanPage(IndexScanDesc scan, GISTSearchItem *pageItem, double *myDistances,
 			{
 				/* Creating index-page GISTSearchItem */
 				item->blkno = ItemPointerGetBlockNumber(&it->t_tid);
+				item->allGood = match & 2;
 
 				/*
 				 * LSN of current page is lsn of parent page for child. We

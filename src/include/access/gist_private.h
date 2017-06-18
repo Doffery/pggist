@@ -131,6 +131,7 @@ typedef struct GISTSearchItem
 {
 	pairingheap_node phNode;
 	BlockNumber blkno;			/* index page number, or InvalidBlockNumber */
+	bool		allGood;
 	union
 	{
 		GistNSN		parentlsn;	/* parent page's LSN, if index page */
